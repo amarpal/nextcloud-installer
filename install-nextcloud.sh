@@ -17,8 +17,9 @@ HTML='/var/www'
 HTUSER='www-data'
 HTGROUP='www-data'
 NGINX_CONF='/etc/nginx/sites-available/nextcloud'
-PHP_INI='/etc/php/7.0/fpm/php.ini'
-PHP_CONF='/etc/php/7.0/fpm/pool.d/www.conf'
+PHP_VERSION=`echo | ls /etc/php`
+PHP_INI="/etc/php/$PHP_VERSION/fpm/php.ini"
+PHP_CONF="/etc/php/$PHP_VERSION/fpm/pool.d/www.conf"
 PGSQL_PASSWORD=$(tr -dc "a-zA-Z0-9" < /dev/urandom | fold -w "64" | head -n 1)
 REDIS_CONF='/etc/redis/redis.conf'
 REDIS_SOCK='/var/run/redis/redis.sock'
@@ -33,7 +34,7 @@ sudo chown -R ${HTUSER}:${HTGROUP} ${NCPATH} -R
 
 # Stop services
 sudo service nginx stop
-sudo service php7.0-fpm stop
+sudo service php${PHP_VERSION}-fpm stop
 
 # Configure OpenSSL
 sudo mkdir -p /etc/ssl/nginx/
@@ -45,7 +46,7 @@ TEMP=$(mktemp)
 cat <<CONFIG_NGINX > ${TEMP}
 upstream php-handler {
     #server 127.0.0.1:9000;
-    server unix:/run/php/php7.0-fpm.sock;
+    server unix:/run/php/php${PHP_VERSION}-fpm.sock;
 }
 
 server {
@@ -220,7 +221,7 @@ sudo sed -i "s|;opcache.enable_cli=0|opcache.enable_cli=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.memory_consumption=64|opcache.memory_consumption=128|g" ${PHP_INI}
 sudo sed -i "s|;opcache.interned_strings_buffer=4|opcache.interned_strings_buffer=8|g" ${PHP_INI}
 sudo sed -i "s|;opcache.max_accelerated_files=2000|opcache.max_accelerated_files=10000|g" ${PHP_INI}
-sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revADD_TO_CONFIGalidate_freq=1|g" ${PHP_INI}
+sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revalidate_freq=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.save_comments=1|opcache.save_comments=1|g" ${PHP_INI}
 
 # Configure Redis
@@ -233,7 +234,7 @@ sudo usermod -a -G redis ${HTUSER}
 sudo service redis-server restart
 
 # Start Nextcloud
-sudo service php7.0-fpm start
+sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Display database configuration information
@@ -243,22 +244,39 @@ echo "Database password: ${PGSQL_PASSWORD}"
 echo "Database name: nextcloud"
 echo
 
-# Wait for Nextcloud web installation to complete
-printf "Waiting for Nextcloud web installation to complete"
-while ! sudo test -f ${NCPATH}/config/config.php
+# Prompt user to create credentials for their Nextcloud Web interface
+while true
 do
-  printf "."
-  sleep 6
+    read -p "Enter an admin username for Nextcloud Web interface: " NCUSER
+    read -p "Enter an admin password for Nextcloud Web interface: " NCPASS
+    echo "Your Nextcloud Web interface username is: $NCUSER"
+    echo "Your Nextcloud Web interface password is: $NCPASS"
+    while true
+    do
+        read -p "Keep this username and password (y/n)?: " answer
+        case $answer in
+            [yY]* ) break 2;;
+            [nN]* ) break 1;;
+            * ) ;;
+        esac
+    done
 done
-sleep 10
-printf "OK"
-
-# Prompt user to press any key
 read -n 1 -s -r -p "Press any key to continue"
+
+# Install Nextcloud via command
+cd ${NCPATH}
+sudo -u www-data php occ  maintenance:install \
+    --database "pgsql" \
+    --database-name "nextcloud" \
+    --database-user "nextcloud" \
+    --database-pass "${PGSQL_PASSWORD}" \
+    --admin-user "${NCUSER}" \
+    --admin-pass "${NCPASS}" \
+    /
 
 # Stop services
 sudo service nginx stop
-sudo service php7.0-fpm stop
+sudo service php${PHP_VERSION}-fpm stop
 sudo service redis-server stop
 
 # Update Nextcloud config
@@ -281,7 +299,7 @@ sed -i '/^\s*$/d' ${NCPATH}/config/config.php
 # Restart services
 sudo systemctl enable redis-server
 sudo service redis-server start
-sudo service php7.0-fpm start
+sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Let's Encrypt
@@ -294,8 +312,8 @@ sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc
 
 # Restart services
 sudo service nginx stop
-sudo service php7.0-fpm stop
+sudo service php${PHP_VERSION}-fpm stop
 sudo service redis-server stop
 sudo service redis-server start
-sudo service php7.0-fpm start
+sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
