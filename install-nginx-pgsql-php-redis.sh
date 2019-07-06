@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e
+
 # nginx
 sudo apt install -y nginx
 
@@ -11,7 +14,7 @@ sudo apt install -y postgresql
 sudo apt install -y php-fpm
 
 # Required prerequisites
-sudo apt install -y php-common php-xml php-gd php-json php-mbstring php-zip
+sudo apt install -y php-common php-curl php-xml php-gd php-json php-mbstring php-zip
 
 # Database connectors
 #sudo apt install -y php-sqlite3
@@ -19,7 +22,7 @@ sudo apt install -y php-common php-xml php-gd php-json php-mbstring php-zip
 sudo apt install -y php-pgsql
 
 # Recommended packages
-sudo apt install -y php-curl php-bz2 php-intl php-mcrypt
+sudo apt install -y php-bz2 php-intl
 
 # Recommended for specific apps (optional)
 sudo apt install -y php-ldap php-smbclient php-imap php-gmp
@@ -38,4 +41,5 @@ sudo apt install -y libreoffice
 sudo apt install -y redis-server
 
 # Let's Encrypt
-sudo apt -y install letsencrypt
+sudo apt install certbot
+sudo apt install python-certbot-nginx

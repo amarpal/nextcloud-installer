@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e
+
 # Check arguments
 if [ -z "$2" ]
 then
@@ -17,12 +20,12 @@ HTML='/var/www'
 HTUSER='www-data'
 HTGROUP='www-data'
 NGINX_CONF='/etc/nginx/sites-available/nextcloud'
-PHP_VERSION=`echo | ls /etc/php`
+PHP_VERSION=`php -v | grep -oP "PHP \K[0-9]+\.[0-9]+"`
 PHP_INI="/etc/php/$PHP_VERSION/fpm/php.ini"
 PHP_CONF="/etc/php/$PHP_VERSION/fpm/pool.d/www.conf"
 PGSQL_PASSWORD=$(tr -dc "a-zA-Z0-9" < /dev/urandom | fold -w "64" | head -n 1)
-REDIS_CONF='/etc/redis/redis.conf'
-REDIS_SOCK='/var/run/redis/redis.sock'
+# REDIS_CONF='/etc/redis/redis.conf'
+# REDIS_SOCK='/var/run/redis/redis.sock'
 
 # Download Nextcloud
 sudo wget -q --show-progress -T 10 -t 2 "${NCREPO}/${STABLEVERSION}.tar.bz2" -P "$HTML"
@@ -64,8 +67,6 @@ server {
 
     ssl_certificate /etc/ssl/nginx/${NCDOMAIN}.crt;
     ssl_certificate_key /etc/ssl/nginx/${NCDOMAIN}.key;
-    #ssl_certificate /etc/letsencrypt/live/${NCDOMAIN}/fullchain.pem;
-    #ssl_certificate_key /etc/letsencrypt/live/${NCDOMAIN}/privkey.pem;
     #ssl_trusted_certificate /etc/letsencrypt/live/${NCDOMAIN}/chain.pem;
 
     # Add headers to serve security related headers
@@ -224,14 +225,14 @@ sudo sed -i "s|;opcache.max_accelerated_files=2000|opcache.max_accelerated_files
 sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revalidate_freq=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.save_comments=1|opcache.save_comments=1|g" ${PHP_INI}
 
-# Configure Redis
-sudo sed -i "s|# unixsocket|unixsocket|g" ${REDIS_CONF}
-sudo sed -i "s|unixsocketperm .*|unixsocketperm 770|g" ${REDIS_CONF}
-sudo sed -i "s|^port.*|port 0|g" ${REDIS_CONF}
-sudo chown redis:root ${REDIS_CONF}
-sudo chmod 600 ${REDIS_CONF}
-sudo usermod -a -G redis ${HTUSER}
-sudo service redis-server restart
+# # Configure Redis
+# sudo sed -i "s|# unixsocket|unixsocket|g" ${REDIS_CONF}
+# sudo sed -i "s|unixsocketperm .*|unixsocketperm 770|g" ${REDIS_CONF}
+# sudo sed -i "s|^port.*|port 0|g" ${REDIS_CONF}
+# sudo chown redis:root ${REDIS_CONF}
+# sudo chmod 600 ${REDIS_CONF}
+# sudo usermod -a -G redis ${HTUSER}
+# sudo service redis-server restart
 
 # Start Nextcloud
 sudo service php${PHP_VERSION}-fpm start
@@ -271,49 +272,49 @@ sudo -u www-data php occ  maintenance:install \
     --database-user "nextcloud" \
     --database-pass "${PGSQL_PASSWORD}" \
     --admin-user "${NCUSER}" \
-    --admin-pass "${NCPASS}" \
-    /
+    --admin-pass "${NCPASS}"
 
 # Stop services
 sudo service nginx stop
 sudo service php${PHP_VERSION}-fpm stop
-sudo service redis-server stop
+# sudo service redis-server stop
 
-# Update Nextcloud config
-TEMP=$(mktemp)
-sudo cp --no-preserve=mode,ownership ${NCPATH}/config/config.php ${TEMP}
-sudo sed -i "s|);||g" ${TEMP}
-cat <<UPDATE_NCCONFIG >> ${TEMP}
-  'memcache.locking' => '\\OC\\Memcache\\Redis',
-  'memcache.local' => '\\OC\\Memcache\\Redis',
-  'redis' =>
-  array (
-    'host' => '${REDIS_SOCK}',
-    'port' => 0,
-  ),
-);
-UPDATE_NCCONFIG
-sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
-sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+# # Update Nextcloud config
+# TEMP=$(mktemp)
+# sudo cp --no-preserve=mode,ownership ${NCPATH}/config/config.php ${TEMP}
+# sudo sed -i "s|);||g" ${TEMP}
+# cat <<UPDATE_NCCONFIG >> ${TEMP}
+#   'memcache.locking' => '\\OC\\Memcache\\Redis',
+#   'memcache.local' => '\\OC\\Memcache\\Redis',
+#   'redis' =>
+#   array (
+#     'host' => '${REDIS_SOCK}',
+#     'port' => 0,
+#   ),
+# );
+# UPDATE_NCCONFIG
+# sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
+# sed -i '/^\s*$/d' ${NCPATH}/config/config.php
 
 # Restart services
-sudo systemctl enable redis-server
-sudo service redis-server start
+# sudo systemctl enable redis-server
+# sudo service redis-server start
 sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Let's Encrypt
-sudo letsencrypt certonly --webroot --agree-tos --email ${EMAIL} -d ${NCDOMAIN} -w ${NCPATH}
-sed -i "s|ssl_certificate /etc/ssl|#ssl_certificate /etc/ssl|g" ${NGINX_CONF}
-sed -i "s|ssl_certificate_key /etc/ssl|#ssl_certificate_key /etc/ssl|g" ${NGINX_CONF}
-sed -i "s|#ssl_certificate /etc/letsencrypt|ssl_certificate /etc/letsencrypt|g" ${NGINX_CONF}
-sed -i "s|#ssl_certificate_key /etc/letsencrypt|ssl_certificate_key /etc/letsencrypt|g" ${NGINX_CONF}
-sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc/letsencrypt|g" ${NGINX_CONF}
+# sudo certbot --nginx --webroot --agree-tos --email ${EMAIL} -d ${NCDOMAIN} -w ${NCPATH}
+sudo certbot --nginx --agree-tos --email ${EMAIL} -d ${NCDOMAIN}
+# sudo sed -i "s|ssl_certificate /etc/ssl|#ssl_certificate /etc/ssl|g" ${NGINX_CONF}
+# sudo sed -i "s|ssl_certificate_key /etc/ssl|#ssl_certificate_key /etc/ssl|g" ${NGINX_CONF}
+# sudo sed -i "s|#ssl_certificate /etc/letsencrypt|ssl_certificate /etc/letsencrypt|g" ${NGINX_CONF}
+# sudo sed -i "s|#ssl_certificate_key /etc/letsencrypt|ssl_certificate_key /etc/letsencrypt|g" ${NGINX_CONF}
+sudo sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc/letsencrypt|g" ${NGINX_CONF}
 
 # Restart services
 sudo service nginx stop
 sudo service php${PHP_VERSION}-fpm stop
-sudo service redis-server stop
-sudo service redis-server start
+# sudo service redis-server stop
+#sudo service redis-server start
 sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
