@@ -18,5 +18,5 @@ login=$email
 password=$pass
 
 #specify the domain to update
-noct.dynamic-dns.net
+host.dynamic-dns.net
 ```
