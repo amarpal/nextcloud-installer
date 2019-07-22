@@ -24,8 +24,8 @@ PHP_VERSION=`php -v | grep -oP "PHP \K[0-9]+\.[0-9]+"`
 PHP_INI="/etc/php/$PHP_VERSION/fpm/php.ini"
 PHP_CONF="/etc/php/$PHP_VERSION/fpm/pool.d/www.conf"
 PGSQL_PASSWORD=$(tr -dc "a-zA-Z0-9" < /dev/urandom | fold -w "64" | head -n 1)
-# REDIS_CONF='/etc/redis/redis.conf'
-# REDIS_SOCK='/var/run/redis/redis.sock'
+REDIS_CONF='/etc/redis/redis.conf'
+REDIS_SOCK='/var/run/redis/redis.sock'
 
 # Download Nextcloud
 sudo wget -q --show-progress -T 10 -t 2 "${NCREPO}/${STABLEVERSION}.tar.bz2" -P "$HTML"
@@ -79,11 +79,16 @@ server {
     # will add the domain to a hardcoded list that is shipped
     # in all major browsers and getting removed from this list
     # could take several months.
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-    add_header X-Robots-Tag none;
-    add_header X-Download-Options noopen;
-    add_header X-Permitted-Cross-Domain-Policies none;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Download-Options "noopen" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Permitted-Cross-Domain-Policies "none" always;
+    add_header X-Robots-Tag "none" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Remove X-Powered-By, which is an information leak
+    fastcgi_hide_header X-Powered-By;
 
     # Cipherli.st strong ciphers
     ssl_protocols TLSv1.2;# Requires nginx >= 1.13.0 else use TLSv1.2
@@ -170,27 +175,30 @@ server {
         index index.php;
     }
 
-    # Adding the cache control header for js and css files
+    # Adding the cache control header for js, css and map files
     # Make sure it is BELOW the PHP block
-    location ~ \.(?:css|js|woff|svg|gif)\$ {
-        try_files \$uri /index.php\$uri\$is_args\$args;
+    location ~ \.(?:css|js|woff2?|svg|gif|map)$ {
+        try_files $uri /index.php$request_uri;
         add_header Cache-Control "public, max-age=15778463";
         # Add headers to serve security related headers (It is intended to
         # have those duplicated to the ones above)
         # Before enabling Strict-Transport-Security headers please read into
         # this topic first.
-        add_header Strict-Transport-Security "max-age=15768000; includeSubDomains; preload;";
+        #add_header Strict-Transport-Security "max-age=15768000; includeSubDomains; preload;" always;
         #
         # WARNING: Only add the preload option once you read about
         # the consequences in https://hstspreload.org/. This option
         # will add the domain to a hardcoded list that is shipped
         # in all major browsers and getting removed from this list
         # could take several months.
-        add_header X-Content-Type-Options nosniff;
-        add_header X-XSS-Protection "1; mode=block";
-        add_header X-Robots-Tag none;
-        add_header X-Download-Options noopen;
-        add_header X-Permitted-Cross-Domain-Policies none;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Download-Options "noopen" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Permitted-Cross-Domain-Policies "none" always;
+        add_header X-Robots-Tag "none" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+
         # Optional: Don't log access to assets
         access_log off;
     }
@@ -225,14 +233,14 @@ sudo sed -i "s|;opcache.max_accelerated_files=2000|opcache.max_accelerated_files
 sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revalidate_freq=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.save_comments=1|opcache.save_comments=1|g" ${PHP_INI}
 
-# # Configure Redis
-# sudo sed -i "s|# unixsocket|unixsocket|g" ${REDIS_CONF}
-# sudo sed -i "s|unixsocketperm .*|unixsocketperm 770|g" ${REDIS_CONF}
-# sudo sed -i "s|^port.*|port 0|g" ${REDIS_CONF}
-# sudo chown redis:root ${REDIS_CONF}
-# sudo chmod 600 ${REDIS_CONF}
-# sudo usermod -a -G redis ${HTUSER}
-# sudo service redis-server restart
+# Configure Redis
+sudo sed -i "s|# unixsocket|unixsocket|g" ${REDIS_CONF}
+sudo sed -i "s|unixsocketperm .*|unixsocketperm 775|g" ${REDIS_CONF}
+sudo sed -i "s|^port.*|port 0|g" ${REDIS_CONF}
+sudo chown redis:root ${REDIS_CONF}
+sudo chmod 600 ${REDIS_CONF}
+sudo usermod -a -G redis ${HTUSER}
+sudo service redis-server restart
 
 # Start Nextcloud
 sudo service php${PHP_VERSION}-fpm start
@@ -277,28 +285,32 @@ sudo -u www-data php occ  maintenance:install \
 # Stop services
 sudo service nginx stop
 sudo service php${PHP_VERSION}-fpm stop
-# sudo service redis-server stop
+sudo service redis-server stop
 
-# # Update Nextcloud config
-# TEMP=$(mktemp)
-# sudo cp --no-preserve=mode,ownership ${NCPATH}/config/config.php ${TEMP}
-# sudo sed -i "s|);||g" ${TEMP}
-# cat <<UPDATE_NCCONFIG >> ${TEMP}
-#   'memcache.locking' => '\\OC\\Memcache\\Redis',
-#   'memcache.local' => '\\OC\\Memcache\\Redis',
-#   'redis' =>
-#   array (
-#     'host' => '${REDIS_SOCK}',
-#     'port' => 0,
-#   ),
-# );
-# UPDATE_NCCONFIG
-# sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
-# sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+# Make directory for redis.sock and update permissions
+sudo mkdir -p /var/run/redis/
+sudo usermod -g www-data redis
+sudo chown -R redis:www-data /var/run/redis
 
-# Restart services
-# sudo systemctl enable redis-server
-# sudo service redis-server start
+# Update Nextcloud config
+TEMP=$(mktemp)
+sudo cp --no-preserve=mode,ownership ${NCPATH}/config/config.php ${TEMP}
+sudo sed -i "s|);||g" ${TEMP}
+cat <<UPDATE_NCCONFIG >> ${TEMP}
+  'memcache.local' => '\OC\Memcache\APCu',
+  'memcache.distributed' => '\OC\Memcache\Redis',
+  'redis' => [
+     'host'     => '/var/run/redis/redis.sock',
+     'port'     => 0,
+   ],
+);
+UPDATE_NCCONFIG
+sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
+sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+
+Restart services
+sudo systemctl enable redis-server
+sudo service redis-server start
 sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
@@ -314,7 +326,7 @@ sudo sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate
 # Restart services
 sudo service nginx stop
 sudo service php${PHP_VERSION}-fpm stop
-# sudo service redis-server stop
-#sudo service redis-server start
+sudo service redis-server stop
+sudo service redis-server start
 sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
