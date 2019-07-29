@@ -178,7 +178,7 @@ server {
     # Adding the cache control header for js, css and map files
     # Make sure it is BELOW the PHP block
     location ~ \.(?:css|js|woff2?|svg|gif|map)$ {
-        try_files $uri /index.php$request_uri;
+        try_files \$uri /index.php\$request_uri;
         add_header Cache-Control "public, max-age=15778463";
         # Add headers to serve security related headers (It is intended to
         # have those duplicated to the ones above)
@@ -203,8 +203,8 @@ server {
         access_log off;
     }
 
-    location ~ \.(?:png|html|ttf|ico|jpg|jpeg)\$ {
-        try_files \$uri /index.php\$uri\$is_args\$args;
+    location ~ \.(?:png|html|ttf|ico|jpg|jpeg)$ {
+        try_files \$uri /index.php\$request_uri;
         # Optional: Don't log access to other assets
         access_log off;
     }
