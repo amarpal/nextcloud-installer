@@ -31,7 +31,7 @@ sudo apt install -y php-ldap php-smbclient php-imap php-ftp
 sudo apt install -y php-gmp
 
 # Enhanced server performance
-# sudo apt install -y php-apcu
+sudo apt install -y php-apcu
 # sudo apt install -y php-memcached
 sudo apt install -y php-redis
 
