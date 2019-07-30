@@ -25,7 +25,6 @@ PHP_INI="/etc/php/$PHP_VERSION/fpm/php.ini"
 PHP_CONF="/etc/php/$PHP_VERSION/fpm/pool.d/www.conf"
 PGSQL_PASSWORD=$(tr -dc "a-zA-Z0-9" < /dev/urandom | fold -w "64" | head -n 1)
 REDIS_CONF='/etc/redis/redis.conf'
-REDIS_SOCK='/var/run/redis/redis.sock'
 
 # Download Nextcloud
 sudo wget -q --show-progress -T 10 -t 2 "${NCREPO}/${STABLEVERSION}.tar.bz2" -P "$HTML"
@@ -287,7 +286,7 @@ sudo service nginx stop
 sudo service php${PHP_VERSION}-fpm stop
 sudo service redis-server stop
 
-# Make directory for redis.sock and update permissions
+# Make directory for redis-server.sock and update permissions
 sudo mkdir -p /var/run/redis/
 sudo usermod -g www-data redis
 sudo chown -R redis:www-data /var/run/redis
@@ -300,27 +299,23 @@ cat <<UPDATE_NCCONFIG >> ${TEMP}
   'memcache.local' => '\OC\Memcache\APCu',
   'memcache.distributed' => '\OC\Memcache\Redis',
   'redis' => [
-     'host'     => '/var/run/redis/redis.sock',
+     'host'     => '/var/run/redis/redis-server.sock',
      'port'     => 0,
    ],
 );
 UPDATE_NCCONFIG
 sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
-sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+sudo sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+sudo sed -i "/^.*0 =>.*/a\      1 => '${NCDOMAIN}'," ${NCPATH}/config/config.php
 
-Restart services
+# Restart services
 sudo systemctl enable redis-server
 sudo service redis-server start
 sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Let's Encrypt
-# sudo certbot --nginx --webroot --agree-tos --email ${EMAIL} -d ${NCDOMAIN} -w ${NCPATH}
 sudo certbot --nginx --agree-tos --email ${EMAIL} -d ${NCDOMAIN}
-# sudo sed -i "s|ssl_certificate /etc/ssl|#ssl_certificate /etc/ssl|g" ${NGINX_CONF}
-# sudo sed -i "s|ssl_certificate_key /etc/ssl|#ssl_certificate_key /etc/ssl|g" ${NGINX_CONF}
-# sudo sed -i "s|#ssl_certificate /etc/letsencrypt|ssl_certificate /etc/letsencrypt|g" ${NGINX_CONF}
-# sudo sed -i "s|#ssl_certificate_key /etc/letsencrypt|ssl_certificate_key /etc/letsencrypt|g" ${NGINX_CONF}
 sudo sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc/letsencrypt|g" ${NGINX_CONF}
 
 # Restart services

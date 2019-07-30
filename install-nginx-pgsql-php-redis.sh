@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-# nginx
+# Pre-prerequisites
+sudo apt install -y curl
+sudo apt install -y tar
+
+# Nginx
 sudo apt install -y nginx
 
 # OpenSSL
@@ -44,5 +48,5 @@ sudo apt install -y libreoffice
 sudo apt install -y redis-server
 
 # Let's Encrypt
-sudo apt install certbot
-sudo apt install python-certbot-nginx
+sudo apt install -y certbot
+sudo apt install -y python-certbot-nginx
