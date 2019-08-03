@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e
+
 # Check arguments
 if [ -z "$2" ]
 then
@@ -17,11 +20,11 @@ HTML='/var/www'
 HTUSER='www-data'
 HTGROUP='www-data'
 NGINX_CONF='/etc/nginx/sites-available/nextcloud'
-PHP_INI='/etc/php/7.0/fpm/php.ini'
-PHP_CONF='/etc/php/7.0/fpm/pool.d/www.conf'
+PHP_VERSION=`php -v | grep -oP "PHP \K[0-9]+\.[0-9]+"`
+PHP_INI="/etc/php/$PHP_VERSION/fpm/php.ini"
+PHP_CONF="/etc/php/$PHP_VERSION/fpm/pool.d/www.conf"
 PGSQL_PASSWORD=$(tr -dc "a-zA-Z0-9" < /dev/urandom | fold -w "64" | head -n 1)
 REDIS_CONF='/etc/redis/redis.conf'
-REDIS_SOCK='/var/run/redis/redis.sock'
 
 # Download Nextcloud
 sudo wget -q --show-progress -T 10 -t 2 "${NCREPO}/${STABLEVERSION}.tar.bz2" -P "$HTML"
@@ -33,7 +36,7 @@ sudo chown -R ${HTUSER}:${HTGROUP} ${NCPATH} -R
 
 # Stop services
 sudo service nginx stop
-sudo service php7.0-fpm stop
+sudo service php${PHP_VERSION}-fpm stop
 
 # Configure OpenSSL
 sudo mkdir -p /etc/ssl/nginx/
@@ -45,7 +48,7 @@ TEMP=$(mktemp)
 cat <<CONFIG_NGINX > ${TEMP}
 upstream php-handler {
     #server 127.0.0.1:9000;
-    server unix:/run/php/php7.0-fpm.sock;
+    server unix:/run/php/php${PHP_VERSION}-fpm.sock;
 }
 
 server {
@@ -63,8 +66,6 @@ server {
 
     ssl_certificate /etc/ssl/nginx/${NCDOMAIN}.crt;
     ssl_certificate_key /etc/ssl/nginx/${NCDOMAIN}.key;
-    #ssl_certificate /etc/letsencrypt/live/${NCDOMAIN}/fullchain.pem;
-    #ssl_certificate_key /etc/letsencrypt/live/${NCDOMAIN}/privkey.pem;
     #ssl_trusted_certificate /etc/letsencrypt/live/${NCDOMAIN}/chain.pem;
 
     # Add headers to serve security related headers
@@ -77,11 +78,16 @@ server {
     # will add the domain to a hardcoded list that is shipped
     # in all major browsers and getting removed from this list
     # could take several months.
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-    add_header X-Robots-Tag none;
-    add_header X-Download-Options noopen;
-    add_header X-Permitted-Cross-Domain-Policies none;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Download-Options "noopen" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Permitted-Cross-Domain-Policies "none" always;
+    add_header X-Robots-Tag "none" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Remove X-Powered-By, which is an information leak
+    fastcgi_hide_header X-Powered-By;
 
     # Cipherli.st strong ciphers
     ssl_protocols TLSv1.2;# Requires nginx >= 1.13.0 else use TLSv1.2
@@ -168,33 +174,36 @@ server {
         index index.php;
     }
 
-    # Adding the cache control header for js and css files
+    # Adding the cache control header for js, css and map files
     # Make sure it is BELOW the PHP block
-    location ~ \.(?:css|js|woff|svg|gif)\$ {
-        try_files \$uri /index.php\$uri\$is_args\$args;
+    location ~ \.(?:css|js|woff2?|svg|gif|map)$ {
+        try_files \$uri /index.php\$request_uri;
         add_header Cache-Control "public, max-age=15778463";
         # Add headers to serve security related headers (It is intended to
         # have those duplicated to the ones above)
         # Before enabling Strict-Transport-Security headers please read into
         # this topic first.
-        add_header Strict-Transport-Security "max-age=15768000; includeSubDomains; preload;";
+        #add_header Strict-Transport-Security "max-age=15768000; includeSubDomains; preload;" always;
         #
         # WARNING: Only add the preload option once you read about
         # the consequences in https://hstspreload.org/. This option
         # will add the domain to a hardcoded list that is shipped
         # in all major browsers and getting removed from this list
         # could take several months.
-        add_header X-Content-Type-Options nosniff;
-        add_header X-XSS-Protection "1; mode=block";
-        add_header X-Robots-Tag none;
-        add_header X-Download-Options noopen;
-        add_header X-Permitted-Cross-Domain-Policies none;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Download-Options "noopen" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Permitted-Cross-Domain-Policies "none" always;
+        add_header X-Robots-Tag "none" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+
         # Optional: Don't log access to assets
         access_log off;
     }
 
-    location ~ \.(?:png|html|ttf|ico|jpg|jpeg)\$ {
-        try_files \$uri /index.php\$uri\$is_args\$args;
+    location ~ \.(?:png|html|ttf|ico|jpg|jpeg)$ {
+        try_files \$uri /index.php\$request_uri;
         # Optional: Don't log access to other assets
         access_log off;
     }
@@ -220,12 +229,12 @@ sudo sed -i "s|;opcache.enable_cli=0|opcache.enable_cli=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.memory_consumption=64|opcache.memory_consumption=128|g" ${PHP_INI}
 sudo sed -i "s|;opcache.interned_strings_buffer=4|opcache.interned_strings_buffer=8|g" ${PHP_INI}
 sudo sed -i "s|;opcache.max_accelerated_files=2000|opcache.max_accelerated_files=10000|g" ${PHP_INI}
-sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revADD_TO_CONFIGalidate_freq=1|g" ${PHP_INI}
+sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revalidate_freq=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.save_comments=1|opcache.save_comments=1|g" ${PHP_INI}
 
 # Configure Redis
 sudo sed -i "s|# unixsocket|unixsocket|g" ${REDIS_CONF}
-sudo sed -i "s|unixsocketperm .*|unixsocketperm 770|g" ${REDIS_CONF}
+sudo sed -i "s|unixsocketperm .*|unixsocketperm 775|g" ${REDIS_CONF}
 sudo sed -i "s|^port.*|port 0|g" ${REDIS_CONF}
 sudo chown redis:root ${REDIS_CONF}
 sudo chmod 600 ${REDIS_CONF}
@@ -233,7 +242,7 @@ sudo usermod -a -G redis ${HTUSER}
 sudo service redis-server restart
 
 # Start Nextcloud
-sudo service php7.0-fpm start
+sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Display database configuration information
@@ -243,59 +252,76 @@ echo "Database password: ${PGSQL_PASSWORD}"
 echo "Database name: nextcloud"
 echo
 
-# Wait for Nextcloud web installation to complete
-printf "Waiting for Nextcloud web installation to complete"
-while ! sudo test -f ${NCPATH}/config/config.php
+# Prompt user to create credentials for their Nextcloud Web interface
+while true
 do
-  printf "."
-  sleep 6
+    read -p "Enter an admin username for Nextcloud Web interface: " NCUSER
+    read -p "Enter an admin password for Nextcloud Web interface: " NCPASS
+    echo "Your Nextcloud Web interface username is: $NCUSER"
+    echo "Your Nextcloud Web interface password is: $NCPASS"
+    while true
+    do
+        read -p "Keep this username and password (y/n)?: " answer
+        case $answer in
+            [yY]* ) break 2;;
+            [nN]* ) break 1;;
+            * ) ;;
+        esac
+    done
 done
-sleep 10
-printf "OK"
-
-# Prompt user to press any key
 read -n 1 -s -r -p "Press any key to continue"
+
+# Install Nextcloud via command
+cd ${NCPATH}
+sudo -u www-data php occ  maintenance:install \
+    --database "pgsql" \
+    --database-name "nextcloud" \
+    --database-user "nextcloud" \
+    --database-pass "${PGSQL_PASSWORD}" \
+    --admin-user "${NCUSER}" \
+    --admin-pass "${NCPASS}"
 
 # Stop services
 sudo service nginx stop
-sudo service php7.0-fpm stop
+sudo service php${PHP_VERSION}-fpm stop
 sudo service redis-server stop
+
+# Make directory for redis-server.sock and update permissions
+sudo mkdir -p /var/run/redis/
+sudo usermod -g www-data redis
+sudo chown -R redis:www-data /var/run/redis
 
 # Update Nextcloud config
 TEMP=$(mktemp)
 sudo cp --no-preserve=mode,ownership ${NCPATH}/config/config.php ${TEMP}
 sudo sed -i "s|);||g" ${TEMP}
 cat <<UPDATE_NCCONFIG >> ${TEMP}
-  'memcache.locking' => '\\OC\\Memcache\\Redis',
-  'memcache.local' => '\\OC\\Memcache\\Redis',
-  'redis' =>
-  array (
-    'host' => '${REDIS_SOCK}',
-    'port' => 0,
-  ),
+  'memcache.local' => '\OC\Memcache\APCu',
+  'memcache.distributed' => '\OC\Memcache\Redis',
+  'redis' => [
+     'host'     => '/var/run/redis/redis-server.sock',
+     'port'     => 0,
+   ],
 );
 UPDATE_NCCONFIG
 sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
-sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+sudo sed -i '/^\s*$/d' ${NCPATH}/config/config.php
+sudo sed -i "/^.*0 =>.*/a\      1 => '${NCDOMAIN}'," ${NCPATH}/config/config.php
 
 # Restart services
 sudo systemctl enable redis-server
 sudo service redis-server start
-sudo service php7.0-fpm start
+sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Let's Encrypt
-sudo letsencrypt certonly --webroot --agree-tos --email ${EMAIL} -d ${NCDOMAIN} -w ${NCPATH}
-sed -i "s|ssl_certificate /etc/ssl|#ssl_certificate /etc/ssl|g" ${NGINX_CONF}
-sed -i "s|ssl_certificate_key /etc/ssl|#ssl_certificate_key /etc/ssl|g" ${NGINX_CONF}
-sed -i "s|#ssl_certificate /etc/letsencrypt|ssl_certificate /etc/letsencrypt|g" ${NGINX_CONF}
-sed -i "s|#ssl_certificate_key /etc/letsencrypt|ssl_certificate_key /etc/letsencrypt|g" ${NGINX_CONF}
-sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc/letsencrypt|g" ${NGINX_CONF}
+sudo certbot --nginx --agree-tos --email ${EMAIL} -d ${NCDOMAIN}
+sudo sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc/letsencrypt|g" ${NGINX_CONF}
 
 # Restart services
 sudo service nginx stop
-sudo service php7.0-fpm stop
+sudo service php${PHP_VERSION}-fpm stop
 sudo service redis-server stop
 sudo service redis-server start
-sudo service php7.0-fpm start
+sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
