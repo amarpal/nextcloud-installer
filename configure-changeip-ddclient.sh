@@ -14,7 +14,7 @@ do
     echo "Your domain is: $DOMAIN"
     while true
     do
-        read -p "Continue with these credentials (y/n)?: " answer
+        read -p "Use this login info and domain (y/n)?: " answer
         case $answer in
             [yY]* ) break 2;;
             [nN]* ) break 1;;
