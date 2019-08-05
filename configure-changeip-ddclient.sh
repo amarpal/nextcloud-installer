@@ -8,13 +8,13 @@ while true
 do
     read -p "Enter your changeip.com Email OR Username: " LOGIN
     read -p "Enter your changeip.com password: " PASSWORD
-    read -p "Enter your domain: " DOMAIN
+    read -p "Enter your domain (e.g. subdomain.dynamic-dns.net): " DOMAIN
     echo "Your changeip.com Email OR Username is: $LOGIN"
     echo "Your changeip.com password is: $PASSWORD"
-    echo "Your domain (e.g. subdomain.dynamic-dns.net) : $DOMAIN"
+    echo "Your domain is: $DOMAIN"
     while true
     do
-        read -p "Is this correct (y/n)?: " answer
+        read -p "Continue with these credentials (y/n)?: " answer
         case $answer in
             [yY]* ) break 2;;
             [nN]* ) break 1;;
