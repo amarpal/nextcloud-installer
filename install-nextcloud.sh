@@ -27,7 +27,9 @@ PGSQL_PASSWORD=$(tr -dc "a-zA-Z0-9" < /dev/urandom | fold -w "64" | head -n 1)
 REDIS_CONF='/etc/redis/redis.conf'
 
 # Download Nextcloud
-sudo wget -q --show-progress -T 10 -t 2 "${NCREPO}/${STABLEVERSION}.tar.bz2" -P "$HTML"
+TEMP=$(mktemp -d)
+sudo wget -q --show-progress -T 10 -t 2 "${NCREPO}/${STABLEVERSION}.tar.bz2" -P "$TEMP"
+sudo mv "${TEMP}/${STABLEVERSION}.tar.bz2" "${HTML}/${STABLEVERSION}.tar.bz2"
 sudo tar -xjf "${HTML}/${STABLEVERSION}.tar.bz2" -C "${HTML}"
 sudo rm "${HTML}/${STABLEVERSION}.tar.bz2"
 
@@ -41,7 +43,6 @@ sudo service php${PHP_VERSION}-fpm stop
 # Configure OpenSSL
 sudo mkdir -p /etc/ssl/nginx/
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 -keyout /etc/ssl/nginx/${NCDOMAIN}.key -out /etc/ssl/nginx/${NCDOMAIN}.crt
-sudo openssl dhparam -out /etc/ssl/nginx/${NCDOMAIN}.pem 4096
 
 # Configure nginx
 TEMP=$(mktemp)
@@ -198,14 +199,14 @@ server {
     }
 
     # Intermediate config from ssl-config.mozilla.org
-    # TLSv1.2 for 100 score on Protocol Support
+    # TLSv1.2 only for 100 score on Protocol Support
     ssl_protocols TLSv1.2;
     
-    # Cipher type and order from acunetix.com
+    # Cipherli.st Strong Ciphers for Nginx + ssllabs.com/projects/best-practices
     # Ciphers >= 256 bits for 100 score on Cipher Strength
-    ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
     
-    # 'on' is recommended by Acunetix, but lowers SSL Labs score to 90
+    # Set to 'off' for 100 score on Key Exchange
     ssl_prefer_server_ciphers off;
 
     ssl_session_timeout 10m;
@@ -242,6 +243,8 @@ sudo sed -i "s|;opcache.interned_strings_buffer=4|opcache.interned_strings_buffe
 sudo sed -i "s|;opcache.max_accelerated_files=2000|opcache.max_accelerated_files=10000|g" ${PHP_INI}
 sudo sed -i "s|;opcache.revalidate_freq=2|opcache.revalidate_freq=1|g" ${PHP_INI}
 sudo sed -i "s|;opcache.save_comments=1|opcache.save_comments=1|g" ${PHP_INI}
+sudo sed -i "s|upload_max_filesize = 2M|upload_max_filesize = 16G|g" ${PHP_INI}
+sudo sed -i "s|memory_limit = 128M|memory_limit = 512M|g" ${PHP_INI}
 
 # Configure Redis
 sudo sed -i "s|# unixsocket|unixsocket|g" ${REDIS_CONF}
@@ -317,7 +320,7 @@ cat <<UPDATE_NCCONFIG >> ${TEMP}
 UPDATE_NCCONFIG
 sudo cp --no-preserve=mode,ownership ${TEMP} ${NCPATH}/config/config.php
 sudo sed -i '/^\s*$/d' ${NCPATH}/config/config.php
-sudo sed -i "/^.*0 =>.*/a\      1 => '${NCDOMAIN}'," ${NCPATH}/config/config.php
+sudo sed -i "/^.*0 => 'localhost',/a\      1 => '${NCDOMAIN}'," ${NCPATH}/config/config.php
 
 # Restart services
 sudo systemctl enable redis-server
@@ -326,8 +329,7 @@ sudo service php${PHP_VERSION}-fpm start
 sudo service nginx start
 
 # Let's Encrypt
-sudo certbot --nginx --agree-tos --email ${EMAIL} -d ${NCDOMAIN}
-sudo sed -i "s|#ssl_trusted_certificate /etc/letsencrypt|ssl_trusted_certificate /etc/letsencrypt|g" ${NGINX_CONF}
+sudo certbot --nginx --agree-tos --email ${EMAIL} -d ${NCDOMAIN} --rsa-key-size 4096
 
 # Restart services
 sudo service nginx stop

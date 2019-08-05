@@ -7,9 +7,9 @@
     ),
     ```
 - [x] configure redis for nextcloud 16
-- [ ] write a script to install DDclient and schedule updates w/ddclient.conf
+- [x] write a script to install DDclient and schedule updates w/ddclient.conf
 - [x] update install script with nextcloud 16 prerequisites
-- [ ] write an uninstall script
+- [ ] write an uninstall script?
 
 ## 28 July todos
 - [x] update prerequisites again
@@ -17,7 +17,7 @@
     - [x] sudo apt install -y tar
 - [x] 'redis.sock' should be 'redis-server.sock' throughout script
 - [x] $REDIS_CONF variable no longer needed
-- [ ] download tarball to temp directory and move it
+- [x] download tarball to temp directory and move it
 
 ## ddclient notes from 28 July
 sudo update-rc.d ddclient enable
