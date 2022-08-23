@@ -49,4 +49,4 @@ sudo apt install -y redis-server
 
 # Let's Encrypt
 sudo apt install -y certbot
-sudo apt install -y python-certbot-nginx
+sudo apt install -y python3-certbot-nginx
