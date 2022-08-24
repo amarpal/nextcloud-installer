@@ -29,7 +29,7 @@ sudo apt install -y php-pgsql
 sudo apt install -y php-bz2 php-intl
 
 # Required for specific apps
-sudo apt install -y php-ldap php-smbclient php-imap php-ftp
+sudo apt install -y php-ldap php-imap php-ftp
 
 # Recommended for specific apps (optional):
 sudo apt install -y php-gmp
@@ -49,4 +49,4 @@ sudo apt install -y redis-server
 
 # Let's Encrypt
 sudo apt install -y certbot
-sudo apt install -y python-certbot-nginx
+sudo apt install -y python3-certbot-nginx
